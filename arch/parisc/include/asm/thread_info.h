@@ -46,9 +46,6 @@ struct thread_info {
 #define THREAD_SIZE             (PAGE_SIZE << THREAD_SIZE_ORDER)
 #define THREAD_SHIFT            (PAGE_SHIFT + THREAD_SIZE_ORDER)
 
-#define PREEMPT_ACTIVE_BIT	28
-#define PREEMPT_ACTIVE		(1 << PREEMPT_ACTIVE_BIT)
-
 /*
  * thread information flags
  */
@@ -78,6 +75,16 @@ struct thread_info {
                                  _TIF_NEED_RESCHED)
 #define _TIF_SYSCALL_TRACE_MASK (_TIF_SYSCALL_TRACE | _TIF_SINGLESTEP |	\
 				 _TIF_BLOCKSTEP | _TIF_SYSCALL_AUDIT)
+
+#ifdef CONFIG_64BIT
+# ifdef CONFIG_COMPAT
+#  define is_32bit_task()	(test_thread_flag(TIF_32BIT))
+# else
+#  define is_32bit_task()	(0)
+# endif
+#else
+# define is_32bit_task()	(1)
+#endif
 
 #endif /* __KERNEL__ */
 
