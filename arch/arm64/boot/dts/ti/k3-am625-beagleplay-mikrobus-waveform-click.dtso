@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: GPL-2.0-only OR MIT
+/*
+ * MikroBus Waveform Click Board -- AD9833, AD5227
+ * Copyright (C) 2026 Trevor Gamblin <tgamblin@baylibre.com>
+ * Copyright (C) 2026 Tim Orling <tim.orling@konsulko.com>
+ *
+ * | Notes                  | Pin  |          Mikrobus         | Pin  | Notes                  |
+ * | ---------------------- | ---- | ------------------------- | ---- | ---------------------- |
+ * |   	                    |   NC |   1 |   AN || PWM  |  16  | OEN  | Clock Generator Enable |
+ * | Chip Select for AD9833 |  FSN |   2 |  RST || INT  |  15  | NC   |                        |
+ * | Chip Select for AD5227 |   CS |   3 |   CS || RX   |  14  | NC   |                        |
+ * | SPI Clock              |  SCK |   4 |  SCK || TX   |  13  | NC   |                        |
+ * |                        |   NC |   5 | MISO || SCL  |  12  | NC   |                        |
+ * | SPI Data IN            |  SDI |   6 | MOSI || SDA  |  11  | NC   |                        |
+ * | Power Supply           | 3.3V |   7 | 3.3V || 5V   |  10  | NC   |                        |
+ * | Ground                 |  GND |   8 |  GND || GND  |   9  | GND  | Ground                 |
+ * |-------------------------------------------------------------------------------------------|
+ *
+ */
+
+/*
+ * DT Overlay for Waveform Click on BeaglePlay MikroBUS socket
+ *
+ * AD9833 (waveform generator) - CS on RST pin (GPIO1_9)
+ * AD5227 (digital pot)        - CS on native SPI2_CS0
+ * OEN (clock enable)          - PWM pin remuxed from ECAP2 to GPIO1_11
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include "k3-pinctrl.h"
+
+/* Disable ECAP2 — we're repurposing its pin (0x01a4) as GPIO for OEN */
+&ecap2 {
+	status = "disabled";
+};
+
+&main_pmx0 {
+	waveform_click_oen_pin: waveform-click-oen-pin {
+		pinctrl-single,pins = <
+			AM62X_IOPAD(0x01a4, PIN_OUTPUT, 7) /* (B20) MCASP0_ACLKX.GPIO1_11 - OEN */
+		>;
+	};
+};
+
+&{/} {
+	/*
+	 * The on-board oscillator, enabled by OEN (GPIO1_11).
+	 * Check the Waveform Click schematic for actual frequency —
+	 * typically 25 MHz for AD9833-based boards.
+	 */
+	waveform_mclk: waveform-mclk {
+		compatible = "gpio-gate-clock";
+		clocks = <&waveform_osc>;
+		#clock-cells = <0>;
+		enable-gpios = <&main_gpio1 11 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&waveform_click_oen_pin>;
+	};
+
+	waveform_osc: waveform-oscillator {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>; /* 25 MHz — verify from schematic! */
+	};
+};
+
+&main_spi2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mikrobus_spi_pins_default>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	cs-gpios = <0>,
+		   <&main_gpio1 9 GPIO_ACTIVE_LOW>;
+
+	ad5227: potentiometer@0 {
+		compatible = "adi,ad5227";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+	};
+
+	ad9833: waveform@1 {
+		compatible = "adi,ad9833";
+		reg = <1>;
+		spi-max-frequency = <12500000>;
+		spi-cpol;
+		spi-cpha;
+		clocks = <&waveform_mclk>;
+		clock-names = "mclk";
+	};
+};
